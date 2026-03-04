@@ -10,9 +10,6 @@
 
 void ERCMain()
 {
-    // Your code here!
 
-    // Or just use the TestGUI function
-    TestGUI();
-
+//hey
 }
