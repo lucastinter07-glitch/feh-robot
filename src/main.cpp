@@ -1,13 +1,16 @@
 
+
 #include <FEHLCD.h>
 #include <FEHIO.h>
 #include <FEHUtility.h>
 #include <FEHMotor.h>
+#include <stdbool.h>
 
 DigitalEncoder right_encoder(FEHIO::Pin8);
 DigitalEncoder left_encoder(FEHIO::Pin10);
 FEHMotor right_motor(FEHMotor::Motor0,9.0);
 FEHMotor left_motor(FEHMotor::Motor2,9.0);
+AnalogInputPin CdS_cell(FEHI0::Pin1);
 
 void move_forward(int percent, int counts) //using encoders
 {
@@ -43,6 +46,12 @@ void move_backward(int percent, int counts) //using encoders
     left_motor.Stop();
 }
 
+bool isStartOn()
+{
+    float cellValue = CdS_cell.Value();
+    return cellValue > /**/;
+}
+
 void ERCMain()
 {
     ///////////////////
@@ -61,6 +70,18 @@ void ERCMain()
     LCD.WriteLine("Touch the screen");
     while(!LCD.Touch(&x,&y)); //Wait for screen to be pressed
     while(LCD.Touch(&x,&y)); //Wait for screen to be unpressed
+
+    //detect if start button turns on
+    if (isStartOn()){
+        int inches = 5;
+        motor_percent = 20;
+        int expected counts = 40.489*inches;
+        move_backward(motor_percent, expected_counts); //drive backwards 5 inches to press button
+        Sleep(1.0);
+        moveForward(motor_percent, expected_counts);
+        Sleep(2.0);
+    }
+    /*
     //drive 37 inches
     int inches = 37;
     motor_percent = 20;
@@ -81,5 +102,5 @@ void ERCMain()
     expected_counts = 40.489*inches;
     move_backward(motor_percent, expected_counts);
     Sleep(2.0); //Wait for counts to stabilize
-
+    */
 }
