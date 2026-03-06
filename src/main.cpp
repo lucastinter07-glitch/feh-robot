@@ -47,12 +47,12 @@ void move_backward(int percent, int counts) //using encoders
 }
 
 
-/*
+
 bool isStartOn()
 {
     float cellValue = CdS_cell.Value();
-    return cellValue >;
-}*/
+    return cellValue < 1.0;
+}
 
 
 void ERCMain()
@@ -74,9 +74,16 @@ void ERCMain()
     while(!LCD.Touch(&x,&y)); //Wait for screen to be pressed
     while(LCD.Touch(&x,&y)); //Wait for screen to be unpressed
 
-    LCD.WriteLine(CdS_cell.Value());
+    
+    while(true){
+    float cellValue = CdS_cell.Value();
+    LCD.Clear(BLACK);
+    LCD.WriteLine(cellValue);
+    Sleep(0.5);
+    }
+
     //detect if start button turns on
-    /*
+    
     if (isStartOn()){
         int inches = 5;
         motor_percent = 20;
@@ -86,7 +93,7 @@ void ERCMain()
         move_forward(motor_percent, expected_counts);
         Sleep(2.0);
     }
-    */
+    
     /*
     //drive 37 inches
     int inches = 37;
