@@ -361,7 +361,7 @@ bool isStartOn()
 bool isStartOn25()
 {
     float cellValue = CdS_cell.Value();
-    return cellValue < 2.5;
+    return cellValue < 0.7;
 }
 
 void ERCMain()
@@ -369,7 +369,8 @@ void ERCMain()
     ///////////////////
     /////EDIT HERE/////
     ///////////////////
-
+    //read in the cds cell value and display it on the screen
+    
     // simple ring buffer for last three actions
     // 0=forward,1=backward,2=left,3=right
     int actType[3] = {0,0,0};
@@ -441,7 +442,7 @@ void ERCMain()
     actIndex = (actIndex+1)%3;
     Sleep(1.0);
 
-    //move forward until the cds cell value is below 2.5 (use new threshold)
+    //move forward until the cds cell value is below 1 (use new threshold)
     motor_percent = 20;
     while (isStartOn25() != true)
     {
@@ -450,6 +451,7 @@ void ERCMain()
         left_motor.SetPercent(motor_percent);
     }
     //stop motors once the cell value is below 2
+    Sleep(0.2);
     right_motor.Stop();
     left_motor.Stop();
     //once the robot it on top of the light, read in the cds cell value and display it on the screen
@@ -458,9 +460,30 @@ void ERCMain()
     LCD.Write("CdS Cell Value: ");
     LCD.WriteLine(cellValue);
 
-    //if the cell value is below 1.5, turn a little bit to the left and move towards the button. 
-    if (cellValue < 1.0) //EDIT THIS
+    //turn a little bit to the right, move forward a little bit, then turn back to the left.
+    if (cellValue < 0.4 )//EDIT THIS
     {
+        LCD.WriteLine("RED");
+        inches = 3.5;
+        motor_percent = 20;
+        expected_counts = 40.489 * inches;
+        turn_right(motor_percent, expected_counts); // turn right a little bit
+        // record turn right
+        actType[actIndex] = 3; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
+        actIndex = (actIndex+1)%3;
+        move_forward(motor_percent, 40.489 * 5); // move forward 3 inches
+        // record forward
+        actType[actIndex] = 0; actPercent[actIndex] = motor_percent; actCounts[actIndex] = 40.489 * 5;
+        actIndex = (actIndex+1)%3;
+        turn_left(motor_percent, expected_counts); // turn left a little bit
+        // record turn left
+        actType[actIndex] = 2; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
+        actIndex = (actIndex+1)%3;
+    }
+    //if the cell value is below 1.5, turn a little bit to the left and move towards the button. 
+    else if (cellValue < 0.7 && cellValue > 0.55) //EDIT THIS
+    {
+        LCD.WriteLine("BLUE");
         inches = 3.5;
         motor_percent = 20;
         expected_counts = 40.489 * inches;
@@ -481,25 +504,7 @@ void ERCMain()
         Sleep(1.0);
     }
     
-    //if the cell value is above 3, turn a little bit to the right, move forward a little bit, then turn back to the left.
-    else if (cellValue > 1.0)//EDIT THIS
-    {
-        inches = 3.5;
-        motor_percent = 20;
-        expected_counts = 40.489 * inches;
-        turn_right(motor_percent, expected_counts); // turn right a little bit
-        // record turn right
-        actType[actIndex] = 3; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-        actIndex = (actIndex+1)%3;
-        move_forward(motor_percent, 40.489 * 5); // move forward 3 inches
-        // record forward
-        actType[actIndex] = 0; actPercent[actIndex] = motor_percent; actCounts[actIndex] = 40.489 * 5;
-        actIndex = (actIndex+1)%3;
-        turn_left(motor_percent, expected_counts); // turn left a little bit
-        // record turn left
-        actType[actIndex] = 2; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-        actIndex = (actIndex+1)%3;
-    }
+    
 
     //move forward for 0.75 seconds to press the button 
     motor_percent = 20;
