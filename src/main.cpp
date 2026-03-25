@@ -12,6 +12,14 @@ FEHMotor right_motor(FEHMotor::Motor0, 9.0);
 FEHMotor left_motor(FEHMotor::Motor2, 9.0);
 AnalogInputPin CdS_cell(FEHIO::Pin1);
 
+// Line following optics: left/center/right
+AnalogInputPin line_left(FEHIO::Pin2);
+AnalogInputPin line_center(FEHIO::Pin3);
+AnalogInputPin line_right(FEHIO::Pin4);
+
+// Threshold for black detection (higher analog value on line for your sensors)
+const float LINE_THRESHOLD = 3.5;
+
 // main for AruCo code
 /*
 
@@ -361,7 +369,74 @@ bool isStartOn()
 bool isStartOn25()
 {
     float cellValue = CdS_cell.Value();
-    return cellValue < 0.7;
+    return cellValue < 1.5;
+}
+
+void FollowLineSimple(float basePower = 15.0f, float timeout = 30.0f)
+{
+    float start = TimeNow();
+    while (TimeNow() - start < timeout)
+    {
+        float leftVal = line_left.Value();
+        float centerVal = line_center.Value();
+        float rightVal = line_right.Value();
+
+        bool leftOn = leftVal > LINE_THRESHOLD;
+        bool centerOn = centerVal > LINE_THRESHOLD;
+        bool rightOn = rightVal > LINE_THRESHOLD;
+
+        // Debug: display sensor values
+        LCD.Clear(BLACK);
+        LCD.SetFontColor(WHITE);
+        LCD.WriteLine("Sensors:");
+        LCD.Write("L: "); LCD.WriteLine(leftVal);
+        LCD.Write("C: "); LCD.WriteLine(centerVal);
+        LCD.Write("R: "); LCD.WriteLine(rightVal);
+        LCD.Write("On: "); LCD.Write(leftOn ? "1 " : "0 ");
+        LCD.Write(centerOn ? "1 " : "0 ");
+        LCD.WriteLine(rightOn ? "1" : "0");
+
+        if (!leftOn && !centerOn && !rightOn)
+        {
+            // All off: line lost, stop
+            LCD.WriteLine("Line lost - stopping");
+            Sleep(1.0f);
+            break;
+        }
+        else if (centerOn)
+        {
+            // Center on: go straight
+            LCD.WriteLine("Straight (center)");
+            left_motor.SetPercent(basePower);
+            right_motor.SetPercent(basePower);
+        }
+        else if (leftOn)
+        {
+            // Left on: turn right to center
+            LCD.WriteLine("Turn right (left on)");
+            left_motor.SetPercent(basePower);
+            right_motor.SetPercent(basePower * 0.5f); // slower right
+        }
+        else if (rightOn)
+        {
+            // Right on: turn left to center
+            LCD.WriteLine("Turn left (right on)");
+            left_motor.SetPercent(basePower * 0.5f); // slower left
+            right_motor.SetPercent(basePower);
+        }
+        else
+        {
+            // Other cases: perhaps turn or stop
+            LCD.WriteLine("Other - stopping");
+            break;
+        }
+
+        Sleep(0.02f); // short loop delay
+    }
+
+    left_motor.Stop();
+    right_motor.Stop();
+    LCD.WriteLine("Stopped");
 }
 
 void ERCMain()
@@ -371,13 +446,7 @@ void ERCMain()
     ///////////////////
     //read in the cds cell value and display it on the screen
     
-    // simple ring buffer for last three actions
-    // 0=forward,1=backward,2=left,3=right
-    int actType[3] = {0,0,0};
-    int actPercent[3] = {0,0,0};
-    int actCounts[3] = {0,0,0};
-    int actIndex = 0;
-
+  
     int motor_percent = 20; // Input power level here (must be between +/- 100)
     int x, y;               // for touch screen
 
@@ -391,6 +460,8 @@ void ERCMain()
     LCD.Clear(BLACK);
 
     float cellValue = CdS_cell.Value();
+
+    FollowLineSimple(20.0f, 30.0f); // basePower, timeout
 
     while (isStartOn() != true)
     {
@@ -411,9 +482,10 @@ void ERCMain()
     //turn off motors
     right_motor.Stop();
     left_motor.Stop();
+    Sleep(1.0);
 
-    //set left motor to 20% until it has moved 6 inches
-    float inches = 6.5;
+    //set left motor to 20% until it has lined up with the ramp.
+    float inches = 6.4;
     float expected_counts = 40.489 * inches;
     left_motor.SetPercent(motor_percent);
     while (left_encoder.Counts() < expected_counts);
@@ -423,143 +495,13 @@ void ERCMain()
     left_motor.Stop();
     Sleep(1.0);
     //move up the ramp
-    inches = 48;
+    inches = 40.0;
     motor_percent = 40;
     expected_counts = 40.489 * inches;
     move_forward(motor_percent, expected_counts); // drive forward up the ramp
-    // record forward action
-    actType[actIndex] = 0; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-    actIndex = (actIndex+1)%3;
     Sleep(1.0);
 
-    // turn 90 degrees left at the top of the ramp
-    inches = 8.6; //EDIT THIS 
-    motor_percent = 20;
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts); // turn left a little bit
-    // record turn left
-    actType[actIndex] = 2; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-    actIndex = (actIndex+1)%3;
-    Sleep(1.0);
-
-    //move forward until the cds cell value is below 1 (use new threshold)
-    motor_percent = 20;
-    while (isStartOn25() != true)
-    {
-        //set both motors to motor percent to move forward
-        right_motor.SetPercent(motor_percent);
-        left_motor.SetPercent(motor_percent);
-    }
-    //stop motors once the cell value is below 2
-    Sleep(0.2);
-    right_motor.Stop();
-    left_motor.Stop();
-    //once the robot it on top of the light, read in the cds cell value and display it on the screen
-    cellValue = CdS_cell.Value();
-    LCD.Clear(BLACK);
-    LCD.Write("CdS Cell Value: ");
-    LCD.WriteLine(cellValue);
-
-    //turn a little bit to the right, move forward a little bit, then turn back to the left.
-    if (cellValue < 0.4 )//EDIT THIS
-    {
-        LCD.WriteLine("RED");
-        inches = 3.5;
-        motor_percent = 20;
-        expected_counts = 40.489 * inches;
-        turn_right(motor_percent, expected_counts); // turn right a little bit
-        // record turn right
-        actType[actIndex] = 3; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-        actIndex = (actIndex+1)%3;
-        move_forward(motor_percent, 40.489 * 5); // move forward 3 inches
-        // record forward
-        actType[actIndex] = 0; actPercent[actIndex] = motor_percent; actCounts[actIndex] = 40.489 * 5;
-        actIndex = (actIndex+1)%3;
-        turn_left(motor_percent, expected_counts); // turn left a little bit
-        // record turn left
-        actType[actIndex] = 2; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-        actIndex = (actIndex+1)%3;
-    }
-    //if the cell value is below 1.5, turn a little bit to the left and move towards the button. 
-    else if (cellValue < 0.7 && cellValue > 0.55) //EDIT THIS
-    {
-        LCD.WriteLine("BLUE");
-        inches = 3.5;
-        motor_percent = 20;
-        expected_counts = 40.489 * inches;
-        turn_left(motor_percent, expected_counts); // turn left a little bit
-        // record turn left
-        actType[actIndex] = 2; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-        actIndex = (actIndex+1)%3;
-        Sleep(1.0);
-        move_forward(motor_percent, 40.489 * 5); // move forward 3 inches
-        // record forward
-        actType[actIndex] = 0; actPercent[actIndex] = motor_percent; actCounts[actIndex] = 40.489 * 5;
-        actIndex = (actIndex+1)%3;
-        Sleep(1.0);
-        turn_right(motor_percent, expected_counts); // turn right a little bit
-        // record turn right
-        actType[actIndex] = 3; actPercent[actIndex] = motor_percent; actCounts[actIndex] = expected_counts;
-        actIndex = (actIndex+1)%3;
-        Sleep(1.0);
-    }
-    
-    
-
-    //move forward for 0.75 seconds to press the button 
-    motor_percent = 20;
-    right_motor.SetPercent(motor_percent);
-    left_motor.SetPercent(motor_percent);
-    Sleep(1000);
-    //turn off motors
-    right_motor.Stop();
-    left_motor.Stop();
-
-    // undo the last three recorded actions in reverse order
-    for(int i=0; i<3; i++) {
-        int idx = actIndex - 1 - i;
-        if(idx < 0) idx += 3;
-        switch(actType[idx]) {
-            case 0: // forward -> back
-                motor_percent = actPercent[idx];
-                move_backward(motor_percent, actCounts[idx]);
-                break;
-            case 1: // backward -> forward
-                motor_percent = actPercent[idx];
-                move_forward(motor_percent, actCounts[idx]);
-                break;
-            case 2: // left -> right
-                motor_percent = actPercent[idx];
-                turn_right(motor_percent, actCounts[idx]);
-                break;
-            case 3: // right -> left
-                motor_percent = actPercent[idx];
-                turn_left(motor_percent, actCounts[idx]);
-                break;
-        }
-        Sleep(1.0);
-    }
-
-    //move backwards 26 inches
-    inches = 23;
-    motor_percent = 25;
-    expected_counts = 40.489 * inches;
-    move_backward(motor_percent, expected_counts); // move backwards 26 inches to get off button and back down the ramp
-
-    //turn 90 degrees to the left
-    inches = 8.6; //EDIT THIS
-    motor_percent = 20;
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts); // turn left 90 degrees to face the ramp
-
-    //move forward and down the ramp
-    inches = 32;
-    motor_percent = 25;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts); // move forward and down the ramp
-
-
-
-
+    // Line follow until the line stops (robot stops when all sensors lose the line)
+    FollowLineSimple(20.0f, 30.0f); // basePower, timeout
 
 }
