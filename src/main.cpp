@@ -374,69 +374,61 @@ bool isStartOn25()
 
 void FollowLineSimple(float basePower = 15.0f, float timeout = 30.0f)
 {
+    //following solid curved line using 3 optosensors and tested values.
+
+  
+    // Threshold rule: sensor value > 3.5 means "on the line" (matches global threshold)
+    const float LINE_THRESHOLD = 3.5f;
+
+    // Controller params
+    const int BASE_SPEED = 15; // base forward percent (reduced by half)
+    const int KP = 30;        // proportional gain (tune on robot)
+
+    int lastError = 0;
+
     float start = TimeNow();
     while (TimeNow() - start < timeout)
     {
-        float leftVal = line_left.Value();
-        float centerVal = line_center.Value();
-        float rightVal = line_right.Value();
+        float l = line_left.Value();
+        float m = line_center.Value();
+        float r = line_right.Value();
 
-        bool leftOn = leftVal > LINE_THRESHOLD;
-        bool centerOn = centerVal > LINE_THRESHOLD;
-        bool rightOn = rightVal > LINE_THRESHOLD;
+        bool left_on = l > LINE_THRESHOLD;
+        bool middle_on = m > LINE_THRESHOLD;
+        bool right_on = r > LINE_THRESHOLD;
 
-        // Debug: display sensor values
-        LCD.Clear(BLACK);
-        LCD.SetFontColor(WHITE);
-        LCD.WriteLine("Sensors:");
-        LCD.Write("L: "); LCD.WriteLine(leftVal);
-        LCD.Write("C: "); LCD.WriteLine(centerVal);
-        LCD.Write("R: "); LCD.WriteLine(rightVal);
-        LCD.Write("On: "); LCD.Write(leftOn ? "1 " : "0 ");
-        LCD.Write(centerOn ? "1 " : "0 ");
-        LCD.WriteLine(rightOn ? "1" : "0");
+        // Compute a simple error: left -> +1, middle -> 0, right -> -1
+        int error = 0;
+        if(left_on) error += 1;
+        if(right_on) error -= 1;
 
-        if (!leftOn && !centerOn && !rightOn)
-        {
-            // All off: line lost, stop
-            LCD.WriteLine("Line lost - stopping");
-            Sleep(1.0f);
-            break;
-        }
-        else if (centerOn)
-        {
-            // Center on: go straight
-            LCD.WriteLine("Straight (center)");
-            left_motor.SetPercent(basePower);
-            right_motor.SetPercent(basePower);
-        }
-        else if (leftOn)
-        {
-            // Left on: turn right to center
-            LCD.WriteLine("Turn right (left on)");
-            left_motor.SetPercent(basePower);
-            right_motor.SetPercent(basePower * 0.5f); // slower right
-        }
-        else if (rightOn)
-        {
-            // Right on: turn left to center
-            LCD.WriteLine("Turn left (right on)");
-            left_motor.SetPercent(basePower * 0.5f); // slower left
-            right_motor.SetPercent(basePower);
-        }
-        else
-        {
-            // Other cases: perhaps turn or stop
-            LCD.WriteLine("Other - stopping");
-            break;
-        }
+        // If only middle sees the line, treat as centered
+        if(middle_on && !left_on && !right_on) error = 0;
 
-        Sleep(0.02f); // short loop delay
+        // If no sensors see the line, keep last error to help reacquire
+        if(!left_on && !middle_on && !right_on) error = lastError;
+
+        lastError = error;
+
+        int correction = KP * error; // can be negative
+
+        int left_percent = BASE_SPEED - correction;
+        int right_percent = BASE_SPEED + correction;
+
+        // Clamp to -100..100
+        if(left_percent > 100) left_percent = 100;
+        if(left_percent < -100) left_percent = -100;
+        if(right_percent > 100) right_percent = 100;
+        if(right_percent < -100) right_percent = -100;
+
+        left_motor.SetPercent(left_percent);
+        right_motor.SetPercent(right_percent);
+
+        Sleep(0.05); // 50 ms
     }
 
     left_motor.Stop();
     right_motor.Stop();
-    LCD.WriteLine("Stopped");
 }
 
 void ERCMain()
