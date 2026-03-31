@@ -2,7 +2,7 @@
 /* FEH ROBOT PROJECT TEAM H3     */
 /* Lucas Tinter, Will Castlen,   */
 /* Hayden Yang, Faiza Choudhry   */
-/* 3/30/26  v2.0.0               */
+/* 3/30/26  v2.0.1               */
 /* ------------------------------*/
 
 // Library Declarations
@@ -29,34 +29,44 @@ AnalogInputPin line_left(FEHIO::Pin2); // Left Optosensor
 AnalogInputPin line_center(FEHIO::Pin3); // Center Optosensor
 AnalogInputPin line_right(FEHIO::Pin4); // Right Optosensor
 
+FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
+
 // General Variable Declarations
-#define PI 3.1415
 #define g 9.8
 
 // Driving Variable Declarations
 #define DRIVE_PERCENT 20
 #define RAMP_PERCENT 40
 #define TURN_PERCENT 20
-#define COUNTS_PER_INCH 40.489
-#define COUNTS_PER_DEGREE 2.88
+#define COUNTS_PER_INCH 34.82
+#define COUNTS_PER_DEGREE 4.9
 
 // Line Following Variable Declarations
 #define LINE_THRESHOLD 3.5f
 #define LINE_BASE_SPEED 15             
 #define LINE_KP 30             
 #define LINE_TIMEOUT 10.0f
-#define LINE_FOLLOW_POWER    20.0f          // TODO: tune base power (%)
+#define LINE_FOLLOW_POWER 20.0f      
 
 // PID Constant Variable Declarations
-#define P_CONST 0.75f
+#define P_CONST 0.85f
 #define I_CONST 0.05f             
 #define D_CONST 0.25f             
-#define PID_SLEEP 0.15f             
-#define TARGET_SPEED 10.0f
+#define PID_SLEEP 0.03f             
+#define TARGET_SPEED 7.0f
+#define TURN_TARGET_SPEED 3.0f
+#define TURN_RIGHT_UNDERSHOOT 178.9f  // counts (36.5 deg * 4.9 — tuned for 90 deg turn)
+#define TURN_LEFT_UNDERSHOOT  181.3f  // counts (37.0 deg * 4.9 — tuned for 90 deg turn)
 
 // Cds Cell Sensor Value Declarations
 #define CDS_RED_MAX 1.0f
 #define CDS_BLUE_MAX 2.0f
+
+// Servo Motor Variable Declarations
+#define ARM_SERVO_MIN 500            // TODO
+#define ARM_SERVO_MAX 2500            // TODO
+#define ARM_UP 160.0f         // degrees: arm stowed
+#define ARM_DOWN 30.0f         // degrees: arm pressing a button
 
 // Light Enum for CdS
 enum LightColor { NO_LIGHT, RED_LIGHT, BLUE_LIGHT };
@@ -88,17 +98,22 @@ void stop_motors();
 LightColor read_light_color();
 void wait_for_start();
 void press_start_button();
+void follow_line(float timeout);
 
 // Execution of Tasks
-void ERCmain()
+void ERCMain()
 {
-    LCD.Clear(BLACK);
-    LCD.SetFontColor(WHITE);
-    LCD.WriteLine("Waiting To Start");
+   int touch_x, touch_y;
 
-    wait_for_start();
-    press_start_button();
+LCD.Clear(BLACK);
+LCD.SetFontColor(WHITE);
+while (!LCD.Touch(&touch_x, &touch_y));
+while ( LCD.Touch(&touch_x, &touch_y));
 
+drive_forward(24.0);
+drive_backward(12.0);
+turn_left(90.0);
+drive_forward(12.0);
 }
 
 // Rest PID Function used before every drive function
@@ -206,13 +221,15 @@ void drive_backward(float inches)
 // Turn Left
 void turn_left(float degrees)
 {
-    int target_counts = (int)(degrees * COUNTS_PER_DEGREE);
+    int target_counts = (int)(degrees * COUNTS_PER_DEGREE) - (int)TURN_LEFT_UNDERSHOOT;
     reset_pid();
 
     while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
     {
-        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),TARGET_SPEED);
-        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),TARGET_SPEED);
+        int avg_counts = (right_encoder.Counts() + left_encoder.Counts()) / 2;
+        float speed = (target_counts - avg_counts <= 20) ? 3.0f : TURN_TARGET_SPEED;
+        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),speed);
+        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),speed);
         right_motor.SetPercent(pid_right.motor_power);
         left_motor.SetPercent (-pid_left.motor_power);
         Sleep(PID_SLEEP);
@@ -224,13 +241,15 @@ void turn_left(float degrees)
 // Turn Right
 void turn_right(float degrees)
 {
-    int target_counts = (int)(degrees * COUNTS_PER_DEGREE);
+    int target_counts = (int)(degrees * COUNTS_PER_DEGREE) - (int)TURN_RIGHT_UNDERSHOOT;
     reset_pid();
 
     while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
     {
-        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),TARGET_SPEED);
-        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),TARGET_SPEED);
+        int avg_counts = (right_encoder.Counts() + left_encoder.Counts()) / 2;
+        float speed = (target_counts - avg_counts <= 20) ? 3.0f : TURN_TARGET_SPEED;
+        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),speed);
+        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),speed);
         right_motor.SetPercent(-pid_right.motor_power);
         left_motor.SetPercent (pid_left.motor_power);
         Sleep(PID_SLEEP);
@@ -259,8 +278,8 @@ void drive_backward_time(float percent, float seconds)
 
 void follow_line(float timeout)
 {
-    float start       = TimeNow();
-    float last_error  = 0.0f;
+    float start = TimeNow();
+    float last_error = 0.0f;
 
     while (TimeNow() - start < timeout)
     {
@@ -273,12 +292,6 @@ void follow_line(float timeout)
         bool left_on   = (l > LINE_THRESHOLD);
         bool center_on = (m > LINE_THRESHOLD);
         bool right_on  = (r > LINE_THRESHOLD);
-
-        // Optional: display sensor values during testing
-        // LCD.Clear(BLACK);
-        // LCD.Write("L:"); LCD.Write(l);
-        // LCD.Write(" M:"); LCD.Write(m);
-        // LCD.Write(" R:"); LCD.WriteLine(r);
 
         // Compute weighted error
         // Line to the left  → error negative → steer left
@@ -293,12 +306,10 @@ void follow_line(float timeout)
 
         // Lost line — hold last correction to help reacquire
         if (!left_on && !center_on && !right_on) error = last_error;
-
         last_error = error;
 
         // Proportional steering correction
         float correction = LINE_KP * error;
-
         float left_power  = LINE_FOLLOW_POWER + correction;
         float right_power = LINE_FOLLOW_POWER - correction;
 
@@ -311,7 +322,7 @@ void follow_line(float timeout)
         left_motor.SetPercent (left_power);
         right_motor.SetPercent(right_power);
 
-        Sleep(0.02f); // 20 ms loop tick
+        Sleep(0.02f); 
     }
 
     stop_motors();
@@ -336,6 +347,7 @@ LightColor read_light_color()
     else return NO_LIGHT;
 }
 
+// Waits for the start of the run.
 void wait_for_start()
 {
     while (read_light_color() != RED_LIGHT)
@@ -345,6 +357,7 @@ void wait_for_start()
     LCD.WriteLine("GO!");
 }
 
+// Executes pressing the start button
 void press_start_button()
 {
     LCD.WriteLine("Pressing start button");
