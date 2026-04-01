@@ -2,7 +2,7 @@
 /* FEH ROBOT PROJECT TEAM H3     */
 /* Lucas Tinter, Will Castlen,   */
 /* Hayden Yang, Faiza Choudhry   */
-/* 3/30/26  v2.0.1               */
+/* 3/30/26  v2.0.3               */
 /* ------------------------------*/
 
 // Library Declarations
@@ -39,7 +39,7 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 #define RAMP_PERCENT 40
 #define TURN_PERCENT 20
 #define COUNTS_PER_INCH 34.82
-#define COUNTS_PER_DEGREE 4.9
+#define COUNTS_PER_DEGREE 2.59
 
 // Line Following Variable Declarations
 #define LINE_THRESHOLD 3.5f
@@ -52,11 +52,10 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 #define P_CONST 0.85f
 #define I_CONST 0.05f             
 #define D_CONST 0.25f             
-#define PID_SLEEP 0.03f             
+#define PID_SLEEP 0.18f             
 #define TARGET_SPEED 7.0f
-#define TURN_TARGET_SPEED 3.0f
-#define TURN_RIGHT_UNDERSHOOT 178.9f  // counts (36.5 deg * 4.9 — tuned for 90 deg turn)
-#define TURN_LEFT_UNDERSHOOT  181.3f  // counts (37.0 deg * 4.9 — tuned for 90 deg turn)
+#define TURN_TARGET_SPEED 1.5f
+#define TURN_SLOWDOWN_SPEED   0.7f
 
 // Cds Cell Sensor Value Declarations
 #define CDS_RED_MAX 1.0f
@@ -103,17 +102,17 @@ void follow_line(float timeout);
 // Execution of Tasks
 void ERCMain()
 {
-   int touch_x, touch_y;
+
+/*
+wait_for_start();
+press_start_button();
+*/
+
+int touch_x, touch_y;
 
 LCD.Clear(BLACK);
 LCD.SetFontColor(WHITE);
-while (!LCD.Touch(&touch_x, &touch_y));
-while ( LCD.Touch(&touch_x, &touch_y));
-
-drive_forward(24.0);
-drive_backward(12.0);
-turn_left(90.0);
-drive_forward(12.0);
+follow_line(15.0);
 }
 
 // Rest PID Function used before every drive function
@@ -169,7 +168,7 @@ float pid_adjustment(PIDState &state, int current_counts, float target_speed)
 
     // Step 8: Clamp and return updated power
     float new_power = state.motor_power + p_term + i_term + d_term;
-    if (new_power <   5.0f) new_power =   5.0f;
+    if (new_power < 5.0f) new_power = 5.0f;
     if (new_power > 100.0f) new_power = 100.0f;
     state.motor_power = new_power;
     return new_power;
@@ -221,13 +220,13 @@ void drive_backward(float inches)
 // Turn Left
 void turn_left(float degrees)
 {
-    int target_counts = (int)(degrees * COUNTS_PER_DEGREE) - (int)TURN_LEFT_UNDERSHOOT;
+    int target_counts = (int)(degrees * COUNTS_PER_DEGREE);
     reset_pid();
 
     while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
     {
         int avg_counts = (right_encoder.Counts() + left_encoder.Counts()) / 2;
-        float speed = (target_counts - avg_counts <= 20) ? 3.0f : TURN_TARGET_SPEED;
+        float speed = (target_counts - avg_counts <= 20) ? TURN_SLOWDOWN_SPEED : TURN_TARGET_SPEED;
         pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),speed);
         pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),speed);
         right_motor.SetPercent(pid_right.motor_power);
@@ -241,13 +240,13 @@ void turn_left(float degrees)
 // Turn Right
 void turn_right(float degrees)
 {
-    int target_counts = (int)(degrees * COUNTS_PER_DEGREE) - (int)TURN_RIGHT_UNDERSHOOT;
+    int target_counts = (int)(degrees * COUNTS_PER_DEGREE);
     reset_pid();
 
     while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
     {
         int avg_counts = (right_encoder.Counts() + left_encoder.Counts()) / 2;
-        float speed = (target_counts - avg_counts <= 20) ? 3.0f : TURN_TARGET_SPEED;
+        float speed = (target_counts - avg_counts <= 20) ? TURN_SLOWDOWN_SPEED : TURN_TARGET_SPEED;
         pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),speed);
         pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),speed);
         right_motor.SetPercent(-pid_right.motor_power);
