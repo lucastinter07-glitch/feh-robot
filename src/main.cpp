@@ -1,234 +1,366 @@
+/* ------------------------------*/
+/* FEH ROBOT PROJECT TEAM H3     */
+/* Lucas Tinter, Will Castlen,   */
+/* Hayden Yang, Faiza Choudhry   */
+/* 3/30/26  v2.0.3               */
+/* ------------------------------*/
+
+// Library Declarations
 #include <FEHLCD.h>
 #include <FEHIO.h>
 #include <FEHUtility.h>
-#include <FEHRCS.h>
 #include <FEHMotor.h>
+#include <FEHServo.h>
+#include <FEHBuzzer.h>
+#include <FEHRCS.h>
+#include <FEHSD.h>
+#include <stdio.h>
+#include <string.h>
 
-FEHMotor right_motor(FEHMotor::Motor0, 9.0);
-FEHMotor left_motor(FEHMotor::Motor2, 9.0);
-AnalogInputPin CdS_cell(FEHIO::P0_0);
+// Part/Hardware Declarations
+FEHMotor right_motor(FEHMotor::Motor0, 9.0); // Right Motor
+FEHMotor left_motor(FEHMotor::Motor2, 9.0); // Left Motor
+DigitalEncoder right_encoder(FEHIO::Pin8); // Right Motor Shaft Encoder
+DigitalEncoder left_encoder(FEHIO::Pin10); // Left Motor Shaft Encoder
 
+AnalogInputPin CdS_cell(FEHIO::Pin1); // CdS Cell Sensor
+
+AnalogInputPin line_left(FEHIO::Pin2); // Left Optosensor
+AnalogInputPin line_center(FEHIO::Pin3); // Center Optosensor
+AnalogInputPin line_right(FEHIO::Pin4); // Right Optosensor
+
+FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
+
+// General Variable Declarations
+#define g 9.8
+
+// Driving Variable Declarations
+#define DRIVE_PERCENT 20
+#define RAMP_PERCENT 40
+#define TURN_PERCENT 20
+#define COUNTS_PER_INCH 34.82
+#define COUNTS_PER_DEGREE 2.59
+
+// Line Following Variable Declarations
+#define LINE_THRESHOLD 3.5f
+#define LINE_BASE_SPEED 15             
+#define LINE_KP 30             
+#define LINE_TIMEOUT 10.0f
+#define LINE_FOLLOW_POWER 20.0f      
+
+// PID Constant Variable Declarations
+#define P_CONST 0.85f
+#define I_CONST 0.05f             
+#define D_CONST 0.25f             
+#define PID_SLEEP 0.18f             
+#define TARGET_SPEED 7.0f
+#define TURN_TARGET_SPEED 1.5f
+#define TURN_SLOWDOWN_SPEED   0.7f
+
+// Cds Cell Sensor Value Declarations
+#define CDS_RED_MAX 1.0f
+#define CDS_BLUE_MAX 2.0f
+
+// Servo Motor Variable Declarations
+#define ARM_SERVO_MIN 500            // TODO
+#define ARM_SERVO_MAX 2500            // TODO
+#define ARM_UP 160.0f         // degrees: arm stowed
+#define ARM_DOWN 30.0f         // degrees: arm pressing a button
+
+// Light Enum for CdS
+enum LightColor { NO_LIGHT, RED_LIGHT, BLUE_LIGHT };
+
+// PID Struct
+struct PIDState
+{
+    float past_error; // stores error from the previous update (D)
+    float error_sum; // running total of all errors (I)
+    int   past_counts; // encoder counts at last update  
+    float past_time; // TimeNow() at last update  
+    float motor_power; // current motor power %
+};
+
+// PID State Variables for left and right motors
+PIDState pid_right;
+PIDState pid_left;
+
+// Function Prototypes
+void reset_pid();
+float pid_adjustment(PIDState &state, int current_counts, float target_speed);
+void drive_forward(float inches);
+void drive_backward(float inches);
+void turn_left(float degrees);
+void turn_right(float degrees);
+void drive_forward_time(float percent, float seconds);
+void drive_backward_time(float percent, float seconds);
+void stop_motors();
+LightColor read_light_color();
+void wait_for_start();
+void press_start_button();
+void follow_line(float timeout);
+
+// Execution of Tasks
 void ERCMain()
 {
-    int motor_percent = 20; // Input power level here (must be between +/- 100)
-    int x, y;               // for touch screen
 
-    // Initialize the screen
-    LCD.Clear(BLACK);
-    LCD.SetFontColor(WHITE);
+/*
+wait_for_start();
+press_start_button();
+*/
 
-    LCD.WriteLine("Touch the screen");
-    while (!LCD.Touch(&x, &y)); // Wait for screen to be pressed
-    while (LCD.Touch(&x, &y)); // Wait for screen to be unpressed
-    LCD.Clear(BLACK);
+int touch_x, touch_y;
 
-    float cellValue = CdS_cell.Value();
+LCD.Clear(BLACK);
+LCD.SetFontColor(WHITE);
+follow_line(15.0);
+}
 
-    while (isStartOn() != true)
+// Rest PID Function used before every drive function
+void reset_pid()
+{
+    right_encoder.ResetCounts();
+    left_encoder.ResetCounts();
+    float now = TimeNow();
+
+    pid_right.past_error = 0.0f;
+    pid_right.error_sum = 0.0f;
+    pid_right.past_counts = 0;
+    pid_right.past_time = now;
+    pid_right.motor_power = TARGET_SPEED; 
+
+    pid_left.past_error = 0.0f;
+    pid_left.error_sum = 0.0f;
+    pid_left.past_counts = 0;
+    pid_left.past_time = now;
+    pid_left.motor_power = TARGET_SPEED;
+
+    Sleep(PID_SLEEP);
+}
+
+// Primary PID Function
+float pid_adjustment(PIDState &state, int current_counts, float target_speed)
+{
+    // Step 1 & 2: Deltas
+    int delta_counts = current_counts - state.past_counts;
+    float delta_time = TimeNow() - state.past_time;
+    if (delta_time <= 0.0f) return state.motor_power;
+
+    // Step 3: Actual velocity in inches/second
+    float actual_velocity = (delta_counts / COUNTS_PER_INCH) / delta_time;
+
+    // Step 4: Error
+    float error = target_speed - actual_velocity;
+
+    // Step 5: Accumulate for I term (clamped to prevent windup)
+    state.error_sum += error;
+    if (state.error_sum >  50.0f) state.error_sum =  50.0f;
+    if (state.error_sum < -50.0f) state.error_sum = -50.0f;
+
+    // Step 6: Three terms
+    float p_term = error * P_CONST;
+    float i_term = state.error_sum * I_CONST;
+    float d_term = (error - state.past_error) * D_CONST;
+
+    // Step 7: Save state for next call
+    state.past_error = error;
+    state.past_counts = current_counts;
+    state.past_time = TimeNow();
+
+    // Step 8: Clamp and return updated power
+    float new_power = state.motor_power + p_term + i_term + d_term;
+    if (new_power < 5.0f) new_power = 5.0f;
+    if (new_power > 100.0f) new_power = 100.0f;
+    state.motor_power = new_power;
+    return new_power;
+}
+
+// Function to stop motors at the same time
+void stop_motors()
+{
+    right_motor.Stop();
+    left_motor.Stop();
+}
+
+// Primary Drive Function
+void drive_forward(float inches)
+{
+    int target_counts = (int)(inches * COUNTS_PER_INCH);
+    reset_pid();
+
+    while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
     {
-        // Wait for cell value to drop below 3 (original threshold)
-        cellValue = CdS_cell.Value();
-        LCD.Write("CdS Cell Value: ");
-        LCD.WriteLine(cellValue);
-        Sleep(0.4);
-
+        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),TARGET_SPEED);
+        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),TARGET_SPEED);
+        right_motor.SetPercent(pid_right.motor_power);
+        left_motor.SetPercent (pid_left.motor_power);
+        Sleep(PID_SLEEP);
     }
 
+    stop_motors();
+}
 
-    //Now move backward 1 seconds and set left and right motors to -20% to get off the button
-    motor_percent = 20;
-    right_motor.SetPercent(-motor_percent);
-    left_motor.SetPercent(-motor_percent);
-    Sleep(1.0);
-    //turn off motors
-    right_motor.Stop();
-    left_motor.Stop();
-    Sleep(0.5);
+// Primary Reverse Function
+void drive_backward(float inches)
+{
+    int target_counts = (int)(inches * COUNTS_PER_INCH);
+    reset_pid();
 
-    //move forward 3 inches 
-    motor_percent = 20;
-    float inches = 8.0;
-    float expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
+    while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
+    {
+        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),TARGET_SPEED);
+        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),TARGET_SPEED);
+        right_motor.SetPercent(-pid_right.motor_power);
+        left_motor.SetPercent (-pid_left.motor_power);
+        Sleep(PID_SLEEP);
+    }
 
-    //turn right 90 degrees 
-    motor_percent = 20;
-    inches = 8.6; //90 degree turn in place (three quarters the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_right(motor_percent, expected_counts);
-    Sleep(0.5);
+    stop_motors();
+}
 
-    //drive backwards 5 inches
-    inches = 3.0;
-    expected_counts = 40.489 * inches;
-    move_backward(motor_percent, expected_counts);
+// Turn Left
+void turn_left(float degrees)
+{
+    int target_counts = (int)(degrees * COUNTS_PER_DEGREE);
+    reset_pid();
 
-    //turn left 45 degrees
-    inches = 4.3; // 45 degree turn in place (quarter the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts);
-    Sleep(0.5);
+    while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
+    {
+        int avg_counts = (right_encoder.Counts() + left_encoder.Counts()) / 2;
+        float speed = (target_counts - avg_counts <= 20) ? TURN_SLOWDOWN_SPEED : TURN_TARGET_SPEED;
+        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),speed);
+        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),speed);
+        right_motor.SetPercent(pid_right.motor_power);
+        left_motor.SetPercent (-pid_left.motor_power);
+        Sleep(PID_SLEEP);
+    }
 
-    //drive back for 5 seconds then turn the motors off 
-    motor_percent = 35;
-    right_motor.SetPercent(-motor_percent);
-    left_motor.SetPercent(-motor_percent);
-    Sleep(2.0);
-    //turn off motors
-    right_motor.Stop();
-    left_motor.Stop();
-    Sleep(0.5);
+    stop_motors();
+}
 
-    //move forward 5 inches
-    motor_percent = 20;
-    inches = 5.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
-    Sleep(0.5);
+// Turn Right
+void turn_right(float degrees)
+{
+    int target_counts = (int)(degrees * COUNTS_PER_DEGREE);
+    reset_pid();
 
-    //turn 45 degrees to the right 
-    inches = 4.3; // 45 degree turn in place (quarter the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_right(motor_percent, expected_counts);
-        Sleep(0.5);
-    
-    //move forward 6 inches
-    inches = 9.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
-    Sleep(0.5);
+    while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
+    {
+        int avg_counts = (right_encoder.Counts() + left_encoder.Counts()) / 2;
+        float speed = (target_counts - avg_counts <= 20) ? TURN_SLOWDOWN_SPEED : TURN_TARGET_SPEED;
+        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),speed);
+        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),speed);
+        right_motor.SetPercent(-pid_right.motor_power);
+        left_motor.SetPercent (pid_left.motor_power);
+        Sleep(PID_SLEEP);
+    }
 
-    //turn left 45 degrees
-    inches = 4.4; // 45 degree turn in place (quarter the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts);
-    Sleep(0.5);
+    stop_motors();
+}
 
-    //move forward 35 inches
-    motor_percent = 40;
-    inches = 40.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
-    Sleep(0.5);
+// Function that drives forward for a set time
+void drive_forward_time(float percent, float seconds)
+{
+    right_motor.SetPercent( percent);
+    left_motor.SetPercent ( percent);
+    Sleep(seconds);
+    stop_motors();
+}
 
-    //turn lefft 90 degrees
-    motor_percent = 20;
-     inches = 8.6; // 90 degree turn in place (half the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts);
-    Sleep(0.5);
+// Function that drives backward for a set time
+void drive_backward_time(float percent, float seconds)
+{
+    right_motor.SetPercent(-percent);
+    left_motor.SetPercent (-percent);
+    Sleep(seconds);
+    stop_motors();
+}
 
-    //drive backward for 3 seconds then turn the motors off
-    motor_percent = 35;
-    right_motor.SetPercent(-motor_percent);
-    left_motor.SetPercent(-motor_percent);
-    Sleep(2.0);
-    //turn off motors
-    right_motor.Stop();
-    left_motor.Stop();
-    Sleep(0.5);
+void follow_line(float timeout)
+{
+    float start = TimeNow();
+    float last_error = 0.0f;
 
-    //drive forward 20 inches but have the right motor go a tiny bit faster. 
-    motor_percent = 50;
-    inches = 25.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
-    Sleep(0.5);
+    while (TimeNow() - start < timeout)
+    {
+        // Read all three sensors
+        float l = line_left.Value();
+        float m = line_center.Value();
+        float r = line_right.Value();
 
-    //move backwards 2 inches
-    motor_percent = 20;
-    inches = 2.0;
-    expected_counts = 40.489 * inches;
-    move_backward(motor_percent, expected_counts);
-    Sleep(0.5);
+        // Determine which sensors are on the line
+        bool left_on   = (l > LINE_THRESHOLD);
+        bool center_on = (m > LINE_THRESHOLD);
+        bool right_on  = (r > LINE_THRESHOLD);
 
-    //turn right a little bit 
-    inches = 4.0; // 45 degree turn in place (quarter the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_right(motor_percent, expected_counts);
-    Sleep(0.5);
+        // Compute weighted error
+        // Line to the left  → error negative → steer left
+        // Line to the right → error positive → steer right
+        // Centered (center only or all on) → error zero → straight
+        float error = 0.0f;
 
-    //move forward 4 inches
-    inches = 4.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
-    Sleep(0.5);
+        if (left_on   && !right_on) error = -1.0f; // line left of center
+        if (right_on  && !left_on)  error =  1.0f; // line right of center
+        if (left_on   &&  right_on) error =  0.0f; // straddling — straight
+        if (center_on && !left_on && !right_on) error = 0.0f; // centered
 
-    //straighten out from the right turn by turning left a little bit
-    inches = 4.0; // 45 degree turn in place (quarter the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts);
-    Sleep(0.5);
+        // Lost line — hold last correction to help reacquire
+        if (!left_on && !center_on && !right_on) error = last_error;
+        last_error = error;
 
-    //move forward 7 inches
-    inches = 5.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
-    Sleep(0.5);
+        // Proportional steering correction
+        float correction = LINE_KP * error;
+        float left_power  = LINE_FOLLOW_POWER + correction;
+        float right_power = LINE_FOLLOW_POWER - correction;
 
-    //turn to the right a little bit.
-    inches = 4.0; // 45 degree turn in place (quarter the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_right(motor_percent, expected_counts);
-    Sleep(0.5);
+        // Clamp motor values to valid range
+        if (left_power  >  100.0f) left_power  =  100.0f;
+        if (left_power  < -100.0f) left_power  = -100.0f;
+        if (right_power >  100.0f) right_power =  100.0f;
+        if (right_power < -100.0f) right_power = -100.0f;
 
-    //move backwards 4 inches
-    inches = 4.0;
-    expected_counts = 40.489 * inches;
-    move_backward(motor_percent, expected_counts);
-    Sleep(0.5);
+        left_motor.SetPercent (left_power);
+        right_motor.SetPercent(right_power);
 
-    //turn left a little bit
-    inches = 4.0; // 45 degree turn in place (quarter the circumference
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts);
-    Sleep(0.5);
+        Sleep(0.02f); 
+    }
 
-    //move backwards 7 inches
-    motor_percent = 40;
-    inches = 12.0;
-    expected_counts = 40.489 * inches;
-    move_backward(motor_percent, expected_counts);
-    Sleep(0.5);
+    stop_motors();
+}
 
+// Function that reads the light color
+LightColor read_light_color()
+{
+    float min_val = CdS_cell.Value();
+    for (int i = 0; i < 4; i++)
+    {
+        Sleep(0.02f);
+        float v = CdS_cell.Value();
+        if (v < min_val) min_val = v;
+    }
 
-    //move forward 2 inches
-    inches = 2.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
+    LCD.Write("CdS min: ");
+    LCD.WriteLine(min_val);
 
-    //turn right a little bit
-    inches = 4.0; // 45 degree turn in place (quarter the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_right(motor_percent, expected_counts);
+    if (min_val < CDS_RED_MAX)  return RED_LIGHT;
+    if (min_val < CDS_BLUE_MAX) return BLUE_LIGHT;
+    else return NO_LIGHT;
+}
 
-    //move forward 4 inches
-    inches = 4.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
+// Waits for the start of the run.
+void wait_for_start()
+{
+    while (read_light_color() != RED_LIGHT)
+    {
+        Sleep(0.02f);
+    }
+    LCD.WriteLine("GO!");
+}
 
-    //turn left to straighten out from the right turn
-    inches = 4.0; // 45 degree turn in place (quarter the circumference
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts);
-
-    //move backward 10 inches 
-    inches = 10.0;
-    expected_counts = 40.489 * inches;
-    move_backward(motor_percent, expected_counts);
-
-    //turn left 90 degrees
-    inches = 8.6; // 90 degree turn in place (half the circumference of a circle with radius equal to half the distance between wheels)
-    expected_counts = 40.489 * inches;
-    turn_left(motor_percent, expected_counts);
-
-    //forward 30 inches
-    inches = 30.0;
-    expected_counts = 40.489 * inches;
-    move_forward(motor_percent, expected_counts);
-
-
-    //stop both motors
-    right_motor.Stop();
-    left_motor.Stop();
-*/
+// Executes pressing the start button
+void press_start_button()
+{
+    LCD.WriteLine("Pressing start button");
+    drive_forward_time(25.0f, 0.4f);  // TODO: tune duration
+    Sleep(0.1f);
+    drive_backward_time(25.0f, 0.4f);
+}
