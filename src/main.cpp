@@ -2,7 +2,7 @@
 /* FEH ROBOT PROJECT TEAM H3     */
 /* Lucas Tinter, Will Castlen,   */
 /* Hayden Yang, Faiza Choudhry   */
-/* 3/30/26  v2.0.3               */
+/* 3/30/26  v2.0.4               */
 /* ------------------------------*/
 
 // Library Declarations
@@ -36,10 +36,10 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 
 // Driving Variable Declarations
 #define DRIVE_PERCENT 20
-#define RAMP_PERCENT 40
+#define RAMP_PERCENT 40f
 #define TURN_PERCENT 20
 #define COUNTS_PER_INCH 34.82
-#define COUNTS_PER_DEGREE 2.59
+#define COUNTS_PER_DEGREE 2.62
 
 // Line Following Variable Declarations
 #define LINE_THRESHOLD 3.5f
@@ -56,10 +56,11 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 #define TARGET_SPEED 7.0f
 #define TURN_TARGET_SPEED 1.5f
 #define TURN_SLOWDOWN_SPEED   0.7f
+#define RAMP_TARGET_SPEED 12.0f
 
 // Cds Cell Sensor Value Declarations
-#define CDS_RED_MAX 1.0f
-#define CDS_BLUE_MAX 2.0f
+#define CDS_RED_MAX 0.75f
+#define CDS_BLUE_MAX 2.25f
 
 // Servo Motor Variable Declarations
 #define ARM_SERVO_MIN 500            // TODO
@@ -91,28 +92,64 @@ void drive_forward(float inches);
 void drive_backward(float inches);
 void turn_left(float degrees);
 void turn_right(float degrees);
-void drive_forward_time(float percent, float seconds);
+void drive_forward_time(float percent_r,float percent_l, float seconds);
 void drive_backward_time(float percent, float seconds);
 void stop_motors();
 LightColor read_light_color();
 void wait_for_start();
 void press_start_button();
 void follow_line(float timeout);
+void sweep_servo(float start_deg, float end_deg, float step, float step_delay);
+void drive_forward_ramp(float inches);
 
 // Execution of Tasks
 void ERCMain()
 {
+    //front_arm_servo.TouchCalibrate();
+    
+    
+    wait_for_start();
+    press_start_button();
 
-/*
-wait_for_start();
-press_start_button();
-*/
+    drive_forward(19.7);
+    turn_left(45);
+    drive_forward(1.8);
+    drive_backward(5);
+    front_arm_servo.SetDegree(60);
+    drive_forward(4.5);
+    sweep_servo(60,115,10,.05);
+    drive_backward(5);
 
-int touch_x, touch_y;
+    turn_right(90);
+    drive_backward(6);
+    turn_left(90);
+    drive_backward_time(40,10.0);
+    drive_forward(2.5);
+    turn_right(90);
+    drive_forward_time(40,39,8.0);
+    
 
-LCD.Clear(BLACK);
-LCD.SetFontColor(WHITE);
-follow_line(15.0);
+    
+
+    /*
+    turn_left(90);
+    drive_forward(6);
+    turn_left(90);
+    drive_forward(7.7);
+    turn_left(90);
+    drive_forward(4);
+    Sleep(2.0);
+    drive_forward_ramp(2);
+    drive_forward_ramp(2);
+    drive_forward_ramp(2);
+    drive_forward_ramp(2);
+    drive_forward_ramp(2);
+    drive_forward_ramp(2);
+    drive_forward_ramp(2);
+    drive_forward_ramp(2);
+    */
+    
+    
 }
 
 // Rest PID Function used before every drive function
@@ -199,6 +236,24 @@ void drive_forward(float inches)
     stop_motors();
 }
 
+// Ramp Driving Function
+void drive_forward_ramp(float inches)
+{
+    int target_counts = (int)(inches * COUNTS_PER_INCH);
+    reset_pid();
+
+    while ((right_encoder.Counts() + left_encoder.Counts()) / 2 < target_counts)
+    {
+        pid_right.motor_power = pid_adjustment(pid_right,right_encoder.Counts(),RAMP_TARGET_SPEED);
+        pid_left.motor_power  = pid_adjustment(pid_left,left_encoder.Counts(),RAMP_TARGET_SPEED);
+        right_motor.SetPercent(pid_right.motor_power);
+        left_motor.SetPercent (pid_left.motor_power);
+        Sleep(PID_SLEEP);
+    }
+
+    stop_motors();
+}
+
 // Primary Reverse Function
 void drive_backward(float inches)
 {
@@ -258,10 +313,10 @@ void turn_right(float degrees)
 }
 
 // Function that drives forward for a set time
-void drive_forward_time(float percent, float seconds)
+void drive_forward_time(float percent_r,float percent_l, float seconds)
 {
-    right_motor.SetPercent( percent);
-    left_motor.SetPercent ( percent);
+    right_motor.SetPercent(percent_r);
+    left_motor.SetPercent (percent_l);
     Sleep(seconds);
     stop_motors();
 }
@@ -360,7 +415,47 @@ void wait_for_start()
 void press_start_button()
 {
     LCD.WriteLine("Pressing start button");
-    drive_forward_time(25.0f, 0.4f);  // TODO: tune duration
+    drive_forward_time(25.0f, 25.0f, 0.4f);  // TODO: tune duration
     Sleep(0.1f);
-    drive_backward_time(25.0f, 0.4f);
+    drive_backward_time(25.0f, 0.8f);
+}
+
+void sweep_servo(float start_deg, float end_deg, float step, float step_delay)
+{
+    LCD.Clear(BLACK);
+    LCD.WriteLine("Sweeping servo...");
+    LCD.Write("From: "); LCD.WriteLine(start_deg);
+    LCD.Write("To:   "); LCD.WriteLine(end_deg);
+    LCD.Write("Step: "); LCD.WriteLine(step);
+
+    // Determine direction
+    float direction = (end_deg > start_deg) ? 1.0 : -1.0;
+    float current   = start_deg;
+
+    front_arm_servo.SetDegree(current);
+    Sleep(step_delay);
+
+    while ((direction > 0 && current < end_deg) ||
+           (direction < 0 && current > end_deg))
+    {
+        current += direction * step;
+
+        // Don't overshoot end_deg
+        if (direction > 0 && current > end_deg) current = end_deg;
+        if (direction < 0 && current < end_deg) current = end_deg;
+
+        front_arm_servo.SetDegree(current);
+
+        LCD.Clear(BLACK);
+        LCD.WriteLine("Sweeping servo...");
+        LCD.Write("Current angle: ");
+        LCD.WriteLine(current);
+
+        Sleep(step_delay);
+    }
+
+    LCD.Clear(BLACK);
+    LCD.WriteLine("Sweep complete.");
+    LCD.Write("Final angle: ");
+    LCD.WriteLine(current);
 }
