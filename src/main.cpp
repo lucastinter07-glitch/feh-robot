@@ -20,6 +20,7 @@
 // Part/Hardware Declarations
 FEHMotor right_motor(FEHMotor::Motor0, 9.0); // Right Motor
 FEHMotor left_motor(FEHMotor::Motor2, 9.0); // Left Motor
+FEHMotor rear_servo_motor(FEHMotor::Motor3, 5.0);
 DigitalEncoder right_encoder(FEHIO::Pin8); // Right Motor Shaft Encoder
 DigitalEncoder left_encoder(FEHIO::Pin10); // Left Motor Shaft Encoder
 
@@ -105,6 +106,12 @@ void drive_forward_ramp(float inches);
 // Execution of Tasks
 void ERCMain()
 {
+    while (true){
+    rear_servo_motor.SetPercent(20);
+    }
+
+
+    /*
     front_arm_servo.TouchCalibrate();
     
     front_arm_servo.SetDegree(78);
@@ -157,7 +164,7 @@ void ERCMain()
     drive_forward(3.0);
     front_arm_servo.SetDegree(80);
     Sleep(1.0);
-
+    */
 
 
 
