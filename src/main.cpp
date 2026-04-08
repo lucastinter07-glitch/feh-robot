@@ -105,29 +105,63 @@ void drive_forward_ramp(float inches);
 // Execution of Tasks
 void ERCMain()
 {
-    //front_arm_servo.TouchCalibrate();
+    front_arm_servo.TouchCalibrate();
     
-    
+    front_arm_servo.SetDegree(78);
+    Sleep(3.0);
+
     wait_for_start();
     press_start_button();
 
-    drive_forward(19.7);
+    drive_forward(20.0);
     turn_left(45);
-    drive_forward(1.8);
-    drive_backward(5);
-    front_arm_servo.SetDegree(60);
-    drive_forward(4.5);
-    sweep_servo(60,115,10,.05);
+    drive_backward(3.1);
+    front_arm_servo.SetDegree(75);
+    drive_forward(4.0);
+    sweep_servo(78,(78+45),10,0.1);
     drive_backward(5);
 
     turn_right(90);
     drive_backward(6);
     turn_left(90);
-    drive_backward_time(40,10.0);
-    drive_forward(2.5);
+    drive_backward_time(40,4.0);
+    drive_forward(4.0);
     turn_right(90);
-    drive_forward_time(40,39,8.0);
-    
+    //drive_forward_time(40,39.5,4.0);
+
+    //NEED TO EDIT THIS DESTANCE
+    drive_forward(26.0);
+
+    turn_left(90);
+    drive_backward_time(40,2.0);
+    drive_forward(9.6);
+    turn_right(90);
+    drive_forward_time(40,39,4.0);
+    drive_backward(1.5);
+    //sweep down
+    front_arm_servo.SetDegree(64);
+    Sleep(1.0);
+    drive_backward(8.0);
+    turn_left(90);
+    drive_forward(6.2);
+    turn_right(45);
+    front_arm_servo.SetDegree(90);
+    drive_forward(4.5);
+
+    front_arm_servo.SetDegree(50);
+    Sleep(1.0);
+    //back up
+    drive_backward(3.0);
+    front_arm_servo.SetDegree(35);
+    Sleep(1.0);
+    drive_forward(3.0);
+    front_arm_servo.SetDegree(80);
+    Sleep(1.0);
+
+
+
+
+
 
     
 
