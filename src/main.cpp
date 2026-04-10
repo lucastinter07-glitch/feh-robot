@@ -20,7 +20,7 @@
 // Part/Hardware Declarations
 FEHMotor right_motor(FEHMotor::Motor0, 9.0); // Right Motor
 FEHMotor left_motor(FEHMotor::Motor2, 9.0); // Left Motor
-FEHMotor rear_servo_motor(FEHMotor::Motor3, 5.0);
+FEHMotor rear_servo_motor(FEHMotor::Motor3, 5.0); // Rear Servo Motor
 DigitalEncoder right_encoder(FEHIO::Pin8); // Right Motor Shaft Encoder
 DigitalEncoder left_encoder(FEHIO::Pin10); // Left Motor Shaft Encoder
 
@@ -106,91 +106,46 @@ void drive_forward_ramp(float inches);
 // Execution of Tasks
 void ERCMain()
 {
-    while (true){
-    rear_servo_motor.SetPercent(20);
-    }
 
-
-    /*
-    front_arm_servo.TouchCalibrate();
-    
-    front_arm_servo.SetDegree(78);
-    Sleep(3.0);
 
     wait_for_start();
     press_start_button();
 
-    drive_forward(20.0);
+    drive_forward(5);
     turn_left(45);
-    drive_backward(3.1);
-    front_arm_servo.SetDegree(75);
-    drive_forward(4.0);
-    sweep_servo(78,(78+45),10,0.1);
-    drive_backward(5);
-
-    turn_right(90);
-    drive_backward(6);
-    turn_left(90);
-    drive_backward_time(40,4.0);
-    drive_forward(4.0);
-    turn_right(90);
-    //drive_forward_time(40,39.5,4.0);
-
-    //NEED TO EDIT THIS DESTANCE
-    drive_forward(26.0);
-
-    turn_left(90);
-    drive_backward_time(40,2.0);
-    drive_forward(9.6);
-    turn_right(90);
-    drive_forward_time(40,39,4.0);
-    drive_backward(1.5);
-    //sweep down
-    front_arm_servo.SetDegree(64);
-    Sleep(1.0);
-    drive_backward(8.0);
-    turn_left(90);
-    drive_forward(6.2);
-    turn_right(45);
-    front_arm_servo.SetDegree(90);
-    drive_forward(4.5);
-
-    front_arm_servo.SetDegree(50);
-    Sleep(1.0);
-    //back up
-    drive_backward(3.0);
-    front_arm_servo.SetDegree(35);
-    Sleep(1.0);
-    drive_forward(3.0);
-    front_arm_servo.SetDegree(80);
-    Sleep(1.0);
-    */
-
-
-
-
-
-    
-
-    /*
-    turn_left(90);
-    drive_forward(6);
-    turn_left(90);
-    drive_forward(7.7);
-    turn_left(90);
     drive_forward(4);
-    Sleep(2.0);
-    drive_forward_ramp(2);
-    drive_forward_ramp(2);
-    drive_forward_ramp(2);
-    drive_forward_ramp(2);
-    drive_forward_ramp(2);
-    drive_forward_ramp(2);
-    drive_forward_ramp(2);
-    drive_forward_ramp(2);
-    */
-    
-    
+    turn_left(87);
+    Sleep(0.5);
+    drive_forward_time(20.0f, 20.0f, 3.0f);
+    Sleep(0.5);
+
+    ////change ////////////
+    drive_backward(0.94);
+
+    Sleep(0.5);
+    turn_left(95);
+    Sleep(0.5);
+    drive_backward(3.5);
+    turn_right(10);
+    Sleep(0.5);
+    drive_backward_time(25.0f, 2.5f);
+    rear_servo_motor.SetPercent(35);
+    Sleep(3.0);
+    rear_servo_motor.Stop();
+    Sleep(0.5);
+    rear_servo_motor.SetPercent(-35);
+    Sleep(3.0);
+    rear_servo_motor.Stop();
+
+    //back to press the start button
+    Sleep(0.5);
+    drive_forward_time(35.0f, 35.0f, 0.5);
+    drive_forward(4);
+    turn_left(45);
+    drive_forward(4);
+    turn_right(87);
+    drive_forward_time(20.0f, 20.0f, 6.0f);
+
 }
 
 // Rest PID Function used before every drive function
