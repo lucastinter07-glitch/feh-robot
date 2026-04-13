@@ -102,28 +102,102 @@ void press_start_button();
 void follow_line(float timeout);
 void sweep_servo(float start_deg, float end_deg, float step, float step_delay);
 void drive_forward_ramp(float inches);
+void compost();
+void apple_pickup_ramp();
+void lever_flip();
+void humidifier();
 
 // Execution of Tasks
 void ERCMain()
 {
+    //calibration
+    RCS.InitializeTouchMenu("H3");
+    front_arm_servo.TouchCalibrate();
 
 
     wait_for_start();
     press_start_button();
 
+
+    compost();
+    apple_pickup_ramp();
+    lever_flip();
+    humidifier();
+
+}
+void humidifier()
+{
+    
+}
+void apple_pickup_ramp()
+{
+    drive_backward(5);
+    turn_left(90);
+    drive_forward_time(20,20,2.0);
+    drive_backward(7);
+    turn_left(90);
+
+    drive_backward(3.1);
+    front_arm_servo.SetDegree(75);
+    drive_forward(4.0);
+    sweep_servo(78,(78+45),10,0.1);
+    drive_backward(5);
+
+    turn_right(90);
+    drive_backward(6);
+    turn_left(90);
+    drive_backward_time(40,4.0);
+    drive_forward(4.0);
+    turn_right(90);
+    //drive_forward_time(40,39.5,4.0);
+
+    //NEED TO EDIT THIS DESTANCE
+    drive_forward(26.0);
+
+    turn_left(90);
+    drive_backward_time(40,2.0);
+    drive_forward(9.6);
+    turn_right(90);
+    drive_forward_time(40,39,4.0);
+    drive_backward(1.5);
+    //sweep down
+    front_arm_servo.SetDegree(64);
+    Sleep(1.0);
+    drive_backward(8.0);
+
+
+}
+void lever_flip()
+{
+    turn_left(90);
+    drive_forward(6.2);
+    turn_right(45);
+    front_arm_servo.SetDegree(90);
+    drive_forward(4.5);
+    front_arm_servo.SetDegree(50);
+    Sleep(1.0);
+    //back up
+    drive_backward(3.0);
+    front_arm_servo.SetDegree(35);
+    Sleep(1.0);
+    drive_forward(3.0);
+    front_arm_servo.SetDegree(80);
+    Sleep(1.0);
+    drive_backward(6.2);
+    turn_left(45);
+}
+void compost()
+{
     drive_forward(5);
     turn_left(45);
     drive_forward(4);
-    turn_left(87);
+    turn_left(90);
     Sleep(0.5);
     drive_forward_time(20.0f, 20.0f, 3.0f);
     Sleep(0.5);
-
-    ////change ////////////
     drive_backward(0.94);
-
     Sleep(0.5);
-    turn_left(95);
+    turn_left(100);
     Sleep(0.5);
     drive_backward(3.5);
     turn_right(10);
@@ -136,18 +210,7 @@ void ERCMain()
     rear_servo_motor.SetPercent(-35);
     Sleep(3.0);
     rear_servo_motor.Stop();
-
-    //back to press the start button
-    Sleep(0.5);
-    drive_forward_time(35.0f, 35.0f, 0.5);
-    drive_forward(4);
-    turn_left(45);
-    drive_forward(4);
-    turn_right(87);
-    drive_forward_time(20.0f, 20.0f, 6.0f);
-
 }
-
 // Rest PID Function used before every drive function
 void reset_pid()
 {
