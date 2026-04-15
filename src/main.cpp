@@ -40,7 +40,7 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 #define RAMP_PERCENT 40f
 #define TURN_PERCENT 20
 #define COUNTS_PER_INCH 34.82
-#define COUNTS_PER_DEGREE 2.62
+#define COUNTS_PER_DEGREE 2.58
 
 // Line Following Variable Declarations
 #define LINE_THRESHOLD 3.5f
@@ -53,10 +53,10 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 #define P_CONST 0.85f
 #define I_CONST 0.05f             
 #define D_CONST 0.25f             
-#define PID_SLEEP 0.18f             
+#define PID_SLEEP 0.025f             
 #define TARGET_SPEED 7.0f
 #define TURN_TARGET_SPEED 1.5f
-#define TURN_SLOWDOWN_SPEED   0.7f
+#define TURN_SLOWDOWN_SPEED 0.7f
 #define RAMP_TARGET_SPEED 12.0f
 
 // Cds Cell Sensor Value Declarations
@@ -227,7 +227,7 @@ void apple_pickup_ramp()
     Sleep(1.0);
     drive_backward(8.0);
 
-
+    
 }
 void lever_flip()
 {
