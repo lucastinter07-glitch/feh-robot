@@ -106,6 +106,7 @@ void compost();
 void apple_pickup_ramp();
 void lever_flip();
 void humidifier();
+void window();
 
 // Execution of Tasks
 void ERCMain()
@@ -125,10 +126,71 @@ void ERCMain()
     humidifier();
 
 }
+
 void humidifier()
 {
-    
+    LCD.Clear(BLACK);
+    LCD.SetFontColor(WHITE);
+    LCD.WriteLine("Humidifier: navigating...");
+
+    // Drive forward to light color
+    drive_forward(6.0); 
+
+    // Read light color
+    LightColor color = read_light_color();
+
+    LCD.Clear(BLACK);
+    if (color == RED_LIGHT)
+    {
+        LCD.SetFontColor(RED);
+        LCD.WriteLine("Humidifier: RED");
+    }
+    else if (color == BLUE_LIGHT)
+    {
+        LCD.SetFontColor(BLUE);
+        LCD.WriteLine("Humidifier: BLUE");
+    }
+    else
+    {
+        LCD.SetFontColor(WHITE);
+        LCD.WriteLine("WARNING: no light detected!");
+        LCD.WriteLine("Check CDS thresholds.");
+        LCD.WriteLine("Skipping humidifier.");
+        drive_backward(6.0);  // TODO: tune — back to start position
+        return;
+    }
+    LCD.SetFontColor(WHITE);
+
+    // ── Step 3 & 4: Offset to correct button and drive into it ───────────
+    if (color == BLUE_LIGHT)
+    {
+        // Blue is on the LEFT — turn left, drive into button, back out
+        LCD.WriteLine("Pressing BLUE (left)...");
+        turn_left(90.0);                  // face the blue button
+        drive_forward(3.0);               // TODO: tune — distance to button
+        Sleep(0.2);                       // hold against button
+        drive_backward(3.0);             // TODO: tune — back off button
+        turn_right(90.0);                 // return to original heading
+    }
+    else if (color == RED_LIGHT)
+    {
+        // Red is on the RIGHT — turn right, drive into button, back out
+        LCD.WriteLine("Pressing RED (right)...");
+        turn_right(90.0);                 // face the red button
+        drive_forward(3.0);               // TODO: tune — distance to button
+        Sleep(0.2);                       // hold against button
+        drive_backward(3.0);             // TODO: tune — back off button
+        turn_left(90.0);                  // return to original heading
+    }
+
+    // ── Step 5: Back away from humidifier ────────────────────────────────
+    drive_backward(6.0);   // TODO: tune — match Step 1 distance
+
+    LCD.Clear(BLACK);
+    LCD.SetFontColor(WHITE);
+    LCD.WriteLine("Humidifier: done.");
 }
+
 void apple_pickup_ramp()
 {
     drive_backward(5);
@@ -145,19 +207,19 @@ void apple_pickup_ramp()
 
     turn_right(90);
     drive_backward(6);
-    turn_left(90);
-    drive_backward_time(40,4.0);
-    drive_forward(4.0);
     turn_right(90);
+    drive_forward_time(40,40,4.0);
+    drive_backward(4.0);
+    turn_left(90);
     //drive_forward_time(40,39.5,4.0);
 
     //NEED TO EDIT THIS DESTANCE
     drive_forward(26.0);
 
-    turn_left(90);
-    drive_backward_time(40,2.0);
-    drive_forward(9.6);
     turn_right(90);
+    drive_forward_time(40,40,2.0);
+    drive_backward(9.6);
+    turn_left(90);
     drive_forward_time(40,39,4.0);
     drive_backward(1.5);
     //sweep down
@@ -210,6 +272,13 @@ void compost()
     rear_servo_motor.SetPercent(-35);
     Sleep(3.0);
     rear_servo_motor.Stop();
+}
+
+void window()
+{
+
+
+
 }
 // Rest PID Function used before every drive function
 void reset_pid()
