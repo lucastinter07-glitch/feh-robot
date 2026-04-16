@@ -54,8 +54,8 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 #define I_CONST 0.05f             
 #define D_CONST 0.25f             
 #define PID_SLEEP 0.025f             
-#define TARGET_SPEED 7.0f
-#define TURN_TARGET_SPEED 1.5f
+#define TARGET_SPEED 10.0f
+#define TURN_TARGET_SPEED 3.0f
 #define TURN_SLOWDOWN_SPEED 0.7f
 #define RAMP_TARGET_SPEED 12.0f
 
@@ -112,17 +112,42 @@ void window();
 void ERCMain()
 {
     //calibration
-    RCS.InitializeTouchMenu("H3");
+    //RCS.InitializeTouchMenu("H3");
     front_arm_servo.TouchCalibrate();
-
 
     wait_for_start();
     press_start_button();
 
-
+    //complete
     compost();
+
+    //drive to apple pickup. 
+        drive_forward_time(35.0,35.0,0.50);
+        turn_left(90);
+        drive_forward(10.0);
+        turn_left(20);
+        drive_forward(1.5);
+        turn_right(20);
+        drive_forward_time(28.0,28.0,4.0);
+        drive_backward(7.5);
+        turn_left(90);
+    //pick up apple.
     apple_pickup_ramp();
+
+    //move to lever
+    drive_backward(9.0);
+    turn_left(90);
+    drive_forward(7.2);
+    turn_right(45);
+
+    //flip lever
     lever_flip();
+
+    //drive to humidifier
+    drive_backward(6.2);
+    turn_left(45);
+
+    //read and press the correct button
     humidifier();
 
 }
@@ -134,7 +159,7 @@ void humidifier()
     LCD.WriteLine("Humidifier: navigating...");
 
     // Drive forward to light color
-    drive_forward(6.0); 
+    drive_forward(0.5); 
 
     // Read light color
     LightColor color = read_light_color();
@@ -154,10 +179,23 @@ void humidifier()
     {
         LCD.SetFontColor(WHITE);
         LCD.WriteLine("WARNING: no light detected!");
-        LCD.WriteLine("Check CDS thresholds.");
-        LCD.WriteLine("Skipping humidifier.");
-        drive_backward(6.0);  // TODO: tune — back to start position
-        return;
+        LCD.WriteLine("Attempting to Locate Light!");
+        while (color == NO_LIGHT)
+        {
+            drive_forward(0.1);
+            color = read_light_color();
+        }
+        LCD.Clear(BLACK);
+        if (color == RED_LIGHT)
+        {
+            LCD.SetFontColor(RED);
+            LCD.WriteLine("Humidifier: RED");
+        }
+        else if (color == BLUE_LIGHT)
+        {
+            LCD.SetFontColor(BLUE);
+            LCD.WriteLine("Humidifier: BLUE");
+        }
     }
     LCD.SetFontColor(WHITE);
 
@@ -190,63 +228,49 @@ void humidifier()
     LCD.SetFontColor(WHITE);
     LCD.WriteLine("Humidifier: done.");
 }
-
 void apple_pickup_ramp()
 {
-    drive_backward(5);
-    turn_left(90);
-    drive_forward_time(20,20,2.0);
-    drive_backward(7);
-    turn_left(90);
+    front_arm_servo.SetDegree(75);//arm down
+    Sleep(1.0);
+    drive_forward(3.3);//approach apples
+    sweep_servo(78,(78+45),10,0.1); //pick up apples
 
-    drive_backward(3.1);
-    front_arm_servo.SetDegree(75);
-    drive_forward(4.0);
-    sweep_servo(78,(78+45),10,0.1);
-    drive_backward(5);
-
+    //MOVE TO DROP OFF APPLES
+    drive_backward(3.0);
     turn_right(90);
     drive_backward(6);
     turn_right(90);
     drive_forward_time(40,40,4.0);
-    drive_backward(4.0);
+    drive_backward(0.9);
     turn_left(90);
-    //drive_forward_time(40,39.5,4.0);
-
-    //NEED TO EDIT THIS DESTANCE
-    drive_forward(26.0);
-
+    drive_forward(28.0);
     turn_right(90);
     drive_forward_time(40,40,2.0);
-    drive_backward(9.6);
+    drive_backward(8.0);
     turn_left(90);
     drive_forward_time(40,39,4.0);
     drive_backward(1.5);
-    //sweep down
+    //DROP OFF APPLES
     front_arm_servo.SetDegree(64);
     Sleep(1.0);
-    drive_backward(8.0);
 
     
 }
 void lever_flip()
 {
-    turn_left(90);
-    drive_forward(6.2);
-    turn_right(45);
+    
     front_arm_servo.SetDegree(90);
-    drive_forward(4.5);
+    drive_forward(3.5);
     front_arm_servo.SetDegree(50);
     Sleep(1.0);
     //back up
     drive_backward(3.0);
-    front_arm_servo.SetDegree(35);
-    Sleep(1.0);
+    front_arm_servo.SetDegree(25);
+    Sleep(5.0);
     drive_forward(3.0);
     front_arm_servo.SetDegree(80);
     Sleep(1.0);
-    drive_backward(6.2);
-    turn_left(45);
+
 }
 void compost()
 {
@@ -255,25 +279,26 @@ void compost()
     drive_forward(4);
     turn_left(90);
     Sleep(0.5);
-    drive_forward_time(20.0f, 20.0f, 3.0f);
+    drive_forward_time(30.0f, 30.0f, 1.5f);
     Sleep(0.5);
     drive_backward(0.94);
     Sleep(0.5);
     turn_left(100);
     Sleep(0.5);
-    drive_backward(3.5);
-    turn_right(10);
+    drive_backward(2.9);
+    turn_right(13);
     Sleep(0.5);
-    drive_backward_time(25.0f, 2.5f);
+    drive_backward(3.1);
     rear_servo_motor.SetPercent(35);
-    Sleep(3.0);
+    Sleep(4.0);
     rear_servo_motor.Stop();
     Sleep(0.5);
     rear_servo_motor.SetPercent(-35);
-    Sleep(3.0);
+    Sleep(4.0);
+    rear_servo_motor.SetPercent(35);
+    Sleep(1.0);
     rear_servo_motor.Stop();
 }
-
 void window()
 {
 
