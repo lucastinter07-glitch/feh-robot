@@ -40,7 +40,7 @@ FEHServo front_arm_servo(FEHServo::Servo0); // Front Servo Motor
 #define RAMP_PERCENT 40f
 #define TURN_PERCENT 20
 #define COUNTS_PER_INCH 34.82
-#define COUNTS_PER_DEGREE 2.58
+#define COUNTS_PER_DEGREE 2.61
 
 // Line Following Variable Declarations
 #define LINE_THRESHOLD 3.5f
@@ -112,7 +112,7 @@ void window();
 void ERCMain()
 {
     //calibration
-    //RCS.InitializeTouchMenu("H3");
+    RCS.InitializeTouchMenu("H3");
     front_arm_servo.TouchCalibrate();
 
     wait_for_start();
@@ -142,13 +142,49 @@ void ERCMain()
 
     //flip lever
     lever_flip();
-
+    front_arm_servo.SetDegree(179.0);
     //drive to humidifier
     drive_backward(6.2);
     turn_left(45);
 
     //read and press the correct button
     humidifier();
+
+
+    //line up for the window
+    turn_left(90);
+    drive_forward_time(28.0,28.0,3.0);
+    drive_backward(1.5);
+    turn_left(90);
+    drive_forward(15.0);
+    drive_forward_time(28.0,28.0,1.0);
+    drive_backward(1.5);
+    turn_right(90);
+    drive_forward(28.0);
+    drive_forward_time(38.0,38.0,6.0);
+ 
+    /*
+    drive_forward_time(28.0,28.0,1.0);
+    drive_backward(8.0);
+ 
+    //drivng backwards to get on the other side of the window
+    drive_backward(8.0);
+    turn_left(20);
+    drive_forward(1.5);
+    turn_right(20);
+    drive_forward(6.0);
+
+    //back to start
+    drive_backward(1.0);
+    turn_left(90);
+    drive_backward(4);
+    turn_right(90);
+    drive_backward(14.0);
+    drive_backward_time(28.0,4.0);
+    drive_forward(1.5);
+    turn_left(90);
+    drive_forward(30);
+*/
 
 }
 
@@ -205,24 +241,24 @@ void humidifier()
         // Blue is on the LEFT — turn left, drive into button, back out
         LCD.WriteLine("Pressing BLUE (left)...");
         turn_left(90.0);                  // face the blue button
-        drive_forward(3.0);               // TODO: tune — distance to button
+        drive_forward(2.5);               // TODO: tune — distance to button
+        turn_right(90.0);
+        drive_forward_time(25.0f,25.0f,3.0f);
         Sleep(0.2);                       // hold against button
-        drive_backward(3.0);             // TODO: tune — back off button
-        turn_right(90.0);                 // return to original heading
     }
     else if (color == RED_LIGHT)
     {
         // Red is on the RIGHT — turn right, drive into button, back out
         LCD.WriteLine("Pressing RED (right)...");
-        turn_right(90.0);                 // face the red button
-        drive_forward(3.0);               // TODO: tune — distance to button
+        turn_right(90.0);                // face the red button
+        drive_forward(2.5);
+        turn_left(90.0);
+        drive_forward_time(25.0f,25.0f,3.0f);             // TODO: tune — distance to button
         Sleep(0.2);                       // hold against button
-        drive_backward(3.0);             // TODO: tune — back off button
-        turn_left(90.0);                  // return to original heading
     }
 
     // ── Step 5: Back away from humidifier ────────────────────────────────
-    drive_backward(6.0);   // TODO: tune — match Step 1 distance
+    drive_backward(1.5);   // TODO: tune — match Step 1 distance
 
     LCD.Clear(BLACK);
     LCD.SetFontColor(WHITE);
@@ -246,7 +282,7 @@ void apple_pickup_ramp()
     drive_forward(28.0);
     turn_right(90);
     drive_forward_time(40,40,2.0);
-    drive_backward(8.0);
+    drive_backward(7.0);
     turn_left(90);
     drive_forward_time(40,39,4.0);
     drive_backward(1.5);
@@ -262,14 +298,14 @@ void lever_flip()
     front_arm_servo.SetDegree(90);
     drive_forward(3.5);
     front_arm_servo.SetDegree(50);
-    Sleep(1.0);
+    Sleep(0.5);
     //back up
     drive_backward(3.0);
     front_arm_servo.SetDegree(25);
     Sleep(5.0);
     drive_forward(3.0);
-    front_arm_servo.SetDegree(80);
-    Sleep(1.0);
+    front_arm_servo.SetDegree(65);
+    Sleep(0.2);
 
 }
 void compost()
@@ -286,7 +322,7 @@ void compost()
     turn_left(100);
     Sleep(0.5);
     drive_backward(2.9);
-    turn_right(13);
+    turn_right(19);
     Sleep(0.5);
     drive_backward(3.1);
     rear_servo_motor.SetPercent(35);
@@ -296,7 +332,7 @@ void compost()
     rear_servo_motor.SetPercent(-35);
     Sleep(4.0);
     rear_servo_motor.SetPercent(35);
-    Sleep(1.0);
+    Sleep(0.1);
     rear_servo_motor.Stop();
 }
 void window()
